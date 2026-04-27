@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Faculty Status Board — EEE Department</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════
+     LOADING OVERLAY
+══════════════════════════════════════════════ -->
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading Faculty Data…</div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SITE HEADER
+══════════════════════════════════════════════ -->
+<header id="siteHeader">
+
+  <!-- University Logo (left) -->
+  <div class="header-logo" id="logoLeft">
+    <div class="logo-placeholder" title="University Logo">UGV</div>
+  </div>
+
+  <!-- Center text block -->
+  <div class="header-center">
+    <div class="uni-name">University of Global Village</div>
+    <div class="divider-line"></div>
+    <div class="dept-name">Department of Electrical &amp; Electronic Engineering</div>
+  </div>
+
+  <!-- Department Logo (right) -->
+  <div class="header-logo" id="logoRight">
+    <div class="logo-placeholder" title="Department Logo">EEE</div>
+  </div>
+
+</header>
+
+<!-- ══════════════════════════════════════════════
+     NOTICE IMAGE SLIDER
+══════════════════════════════════════════════ -->
+<section id="sliderSection" aria-label="Notice Slider">
+  <div class="slider-track" id="sliderTrack">
+    <!-- Slides are injected by JS — placeholder solid-colour banners as fallback -->
+    <img class="slide" src="https://picsum.photos/seed/notice1/1400/200" alt="Notice 1" loading="lazy">
+    <img class="slide" src="https://picsum.photos/seed/notice2/1400/200" alt="Notice 2" loading="lazy">
+    <img class="slide" src="https://picsum.photos/seed/notice3/1400/200" alt="Notice 3" loading="lazy">
+  </div>
+  <button class="slider-btn" id="sliderPrev" aria-label="Previous">&#8592;</button>
+  <button class="slider-btn" id="sliderNext" aria-label="Next">&#8594;</button>
+  <div class="slider-dots" id="sliderDots"></div>
+</section>
+
+<!-- ══════════════════════════════════════════════
+     BOARD CONTENT
+══════════════════════════════════════════════ -->
+<main id="boardMain">
+
+  <!-- ── TOP ROW : Professor / Head / Co-Head ── -->
+  <div class="section-title" id="headTitle">Senior Faculty</div>
+  <div id="headSection" role="list" aria-label="Senior Faculty"></div>
+
+  <!-- ── LECTURERS ── -->
+  <div class="section-title" id="lecturerTitle">Lecturers</div>
+  <div id="lecturerSection" class="grid-section" role="list" aria-label="Lecturers"></div>
+
+  <!-- ── LAB INSTRUCTORS ── -->
+  <div class="section-title" id="labTitle">Lab Instructors</div>
+  <div id="labSection" class="grid-section" role="list" aria-label="Lab Instructors"></div>
+
+</main>
+
+<!-- ══════════════════════════════════════════════
+     FOOTER
+══════════════════════════════════════════════ -->
+<footer id="siteFooter">
+
+  <!-- Live Clock -->
+  <div class="footer-clock">
+    <div class="clock-time" id="clockTime">00:00:00</div>
+    <div class="clock-date" id="clockDate">Loading…</div>
+  </div>
+
+  <!-- Scrolling Ticker -->
+  <div class="footer-ticker">
+    <div class="ticker-label">📢 Notices</div>
+    <span class="ticker-scroll" id="tickerText">
+      📌 Mid-Term Exams: 15 May – 22 May &nbsp;|&nbsp;
+      📌 Lab reports must be submitted by Friday &nbsp;|&nbsp;
+      📌 Faculty meeting: Every Monday 2:00 PM in Conference Room &nbsp;|&nbsp;
+      📌 Result publication: EEE 3rd Semester — check notice board &nbsp;|&nbsp;
+      📌 EEE Cultural Fest registration open — contact CR for details
+    </span>
+  </div>
+
+  <!-- Admin link -->
+  <a href="/admin" class="footer-admin-link">⚙ Admin Panel</a>
+
+</footer>
+
+<!-- ══════════════════════════════════════════════
+     MAIN SCRIPT
+══════════════════════════════════════════════ -->
+<script>
+"use strict";
+
+/* ───────────────────────────────
+   STATUS → CSS class helper
+─────────────────────────────── */
+function statusClass(status) {
+  if (!status) return "na";
+  return status.replace(/\s+/g, "-");
+}
+
+function ringClass(status) {
+  const s = (status || "").toLowerCase().replace(/\s+/g, "");
+  if (s === "available")       return "ring-available";
+  if (s === "busy")            return "ring-busy";
+  if (s === "inclass")         return "ring-inclass";
+  if (s === "onleave")         return "ring-leave";
+  if (s === "inmeeting")       return "ring-meeting";
+  if (s === "atdepartment")    return "ring-dept";
+  if (s === "weekend")         return "ring-weekend";
+  return "ring-na";
+}
+
+/* ───────────────────────────────
+   ROLE LABELS (badge text)
+─────────────────────────────── */
+const ROLE_LABEL = {
+  professor: "Professor",
+  head:      "Dept. Head",
+  cohead:    "Deputy Head"
+};
+
+/* ───────────────────────────────
+   BUILD A CARD  (HTML string)
+─────────────────────────────── */
+function buildCard(t, showBadge = false) {
+  const badge = showBadge && ROLE_LABEL[t.role]
+    ? `<div class="role-badge">${ROLE_LABEL[t.role]}</div>`
+    : "";
+
+  const phone = t.phone
+    ? `<div class="card-contact"><span class="icon">📞</span>${t.phone}</div>`
+    : "";
+
+  const email = t.email
+    ? `<div class="card-contact"><span class="icon">✉</span>${t.email}</div>`
+    : "";
+
+  const img = t.image
+    ? `<img class="avatar" src="${t.image}" alt="${t.name}" loading="lazy">`
+    : `<div class="avatar" style="background:#c9a84c;display:flex;align-items:center;justify-content:center;font-weight:700;color:#06122b;font-size:22px">${(t.name||"?")[0]}</div>`;
+
+  return `
+    <div class="card" role="listitem" aria-label="${t.name}">
+      <div class="avatar-wrap ${ringClass(t.status)}">
+        ${img}
+      </div>
+      ${badge}
+      <div class="card-name" title="${t.name}">${t.name}</div>
+      <div class="card-designation" title="${t.designation}">${t.designation || ""}</div>
+      ${phone}
+      ${email}
+      <div class="status-badge ${statusClass(t.status)}">${t.status || "NA"}</div>
+    </div>
+  `;
+}
+
+/* ───────────────────────────────
+   RENDER BOARD
+─────────────────────────────── */
+const ROLE_ORDER = { professor: 1, head: 2, cohead: 3 };
+
+function renderBoard(teachers) {
+  const headEl       = document.getElementById("headSection");
+  const lecturerEl   = document.getElementById("lecturerSection");
+  const labEl        = document.getElementById("labSection");
+
+  headEl.innerHTML     = "";
+  lecturerEl.innerHTML = "";
+  labEl.innerHTML      = "";
+
+  /* Sort top 3 roles */
+  const headTeachers = teachers
+    .filter(t => ["professor","head","cohead"].includes(t.role))
+    .sort((a, b) => (ROLE_ORDER[a.role] || 99) - (ROLE_ORDER[b.role] || 99));
+
+  /* Build head row */
+  headTeachers.forEach((t, i) => {
+    const div = document.createElement("div");
+    div.style.animationDelay = (i * 0.1) + "s";
+    div.innerHTML = buildCard(t, true);
+    headEl.appendChild(div.firstElementChild);
+  });
+
+  /* Lecturers & Lab */
+  let lecCount = 0;
+  let labCount = 0;
+
+  teachers.forEach((t, i) => {
+    if (["professor","head","cohead"].includes(t.role)) return;
+
+    const html = buildCard(t, false);
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+    const card = wrapper.firstElementChild;
+
+    if (t.role === "lab") {
+      card.style.animationDelay = (labCount * 0.07) + "s";
+      labEl.appendChild(card);
+      labCount++;
+    } else {
+      /* lecturer or fallback */
+      card.style.animationDelay = (lecCount * 0.07) + "s";
+      lecturerEl.appendChild(card);
+      lecCount++;
+    }
+  });
+
+  /* Hide empty section titles */
+  document.getElementById("lecturerTitle").style.display = lecCount  ? "" : "none";
+  document.getElementById("labTitle").style.display      = labCount  ? "" : "none";
+}
+
+/* ───────────────────────────────
+   FETCH DATA + AUTO REFRESH
+─────────────────────────────── */
+async function fetchAndRender() {
+  try {
+    const res  = await fetch("/data");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    renderBoard(data);
+
+    /* Hide loader on first successful load */
+    document.getElementById("loadingOverlay").classList.add("hidden");
+  } catch (err) {
+    console.error("Failed to load faculty data:", err);
+  }
+}
+
+/* Initial load */
+fetchAndRender();
+
+/* Auto-refresh every 30 seconds (keeps status current) */
+setInterval(fetchAndRender, 30_000);
+
+/* ───────────────────────────────
+   LIVE CLOCK  (Bangladesh Time)
+─────────────────────────────── */
+const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const MONTH_NAMES = ["January","February","March","April","May","June",
+                     "July","August","September","October","November","December"];
+
+function updateClock() {
+  const now = new Date();
+  /* Bangladesh = UTC+6 */
+  const bd  = new Date(now.getTime() + 6 * 3600_000);
+
+  const hh = String(bd.getUTCHours()).padStart(2, "0");
+  const mm = String(bd.getUTCMinutes()).padStart(2, "0");
+  const ss = String(bd.getUTCSeconds()).padStart(2, "0");
+
+  document.getElementById("clockTime").textContent = `${hh}:${mm}:${ss}`;
+  document.getElementById("clockDate").textContent  =
+    `${DAY_NAMES[bd.getUTCDay()]}, ${bd.getUTCDate()} ${MONTH_NAMES[bd.getUTCMonth()]} ${bd.getUTCFullYear()}`;
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+/* ───────────────────────────────
+   IMAGE SLIDER
+─────────────────────────────── */
+(function initSlider() {
+  const track  = document.getElementById("sliderTrack");
+  const dotsEl = document.getElementById("sliderDots");
+  const slides  = track.querySelectorAll(".slide");
+  const total   = slides.length;
+  let current   = 0;
+  let timer;
+
+  /* Build dots */
+  for (let i = 0; i < total; i++) {
+    const dot = document.createElement("div");
+    dot.className = "slider-dot" + (i === 0 ? " active" : "");
+    dot.addEventListener("click", () => goTo(i));
+    dotsEl.appendChild(dot);
+  }
+
+  function goTo(idx) {
+    current = (idx + total) % total;
+    track.style.transform = `translateX(-${current * 100}%)`;
+    dotsEl.querySelectorAll(".slider-dot").forEach((d, i) =>
+      d.classList.toggle("active", i === current)
+    );
+    resetTimer();
+  }
+
+  function next() { goTo(current + 1); }
+  function prev() { goTo(current - 1); }
+
+  function resetTimer() {
+    clearInterval(timer);
+    timer = setInterval(next, 5000);
+  }
+
+  document.getElementById("sliderNext").addEventListener("click", next);
+  document.getElementById("sliderPrev").addEventListener("click", prev);
+
+  resetTimer();
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel — Faculty Status Board</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="admin-page">
+
+<!-- Toast notification -->
+<div id="toast"></div>
+
+<!-- ══ ADMIN HEADER ══ -->
+<div class="admin-header">
+  <h1>⚙ Admin Panel</h1>
+  <a href="/">← Back to Board</a>
+</div>
+
+<!-- ══ ADMIN BODY ══ -->
+<div class="admin-body">
+
+  <!-- ───── LEFT : ADD / EDIT FORM ───── -->
+  <div class="admin-form-panel">
+    <h2 id="formTitle">➕ Add Teacher</h2>
+
+    <!-- Hidden ID for edit mode -->
+    <input type="hidden" id="editId" value="">
+
+    <div class="form-group">
+      <label>Full Name *</label>
+      <input type="text" id="fName" placeholder="e.g. Dr. Ahmed Hossain">
+    </div>
+    <div class="form-group">
+      <label>Designation</label>
+      <input type="text" id="fDesig" placeholder="e.g. Lecturer">
+    </div>
+    <div class="form-group">
+      <label>Role *</label>
+      <select id="fRole">
+        <option value="lecturer">Lecturer</option>
+        <option value="lab">Lab Instructor</option>
+        <option value="professor">Professor</option>
+        <option value="head">Head of Department</option>
+        <option value="cohead">Deputy Head</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Phone</label>
+      <input type="text" id="fPhone" placeholder="01xxxxxxxxx">
+    </div>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="fEmail" placeholder="name@ugv.edu.bd">
+    </div>
+    <div class="form-group">
+      <label>Image URL</label>
+      <input type="url" id="fImage" placeholder="https://…">
+    </div>
+
+    <!-- Weekly Schedule -->
+    <div class="form-group">
+      <label>Weekly Class Schedule</label>
+      <small style="color:var(--text-soft);font-size:10px;display:block;margin-bottom:6px">
+        Comma-separated slots: HH:MM-HH:MM &nbsp;e.g. 09:00-10:30, 14:00-15:30
+      </small>
+      <div class="schedule-grid">
+        <label>Sunday</label>    <input type="text" id="sSun"  placeholder="09:00-10:30">
+        <label>Monday</label>    <input type="text" id="sMon"  placeholder="">
+        <label>Tuesday</label>   <input type="text" id="sTue"  placeholder="">
+        <label>Wednesday</label> <input type="text" id="sWed"  placeholder="">
+        <label>Thursday</label>  <input type="text" id="sThu"  placeholder="">
+        <label>Friday</label>    <input type="text" id="sFri"  placeholder="">
+        <label>Saturday</label>  <input type="text" id="sSat"  placeholder="">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+      <button class="btn btn-gold" onclick="submitForm()">💾 Save</button>
+      <button class="btn" style="background:rgba(255,255,255,0.1);color:#fff" onclick="resetForm()">✕ Clear</button>
+    </div>
+  </div>
+
+  <!-- ───── RIGHT : TEACHER TABLE ───── -->
+  <div class="teacher-table-wrap">
+    <h2>👥 All Faculty Members</h2>
+
+    <div style="padding:0 20px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="searchInput" placeholder="🔍 Search by name…"
+        style="background:var(--navy-deep);border:1px solid rgba(201,168,76,0.25);
+               color:#fff;border-radius:8px;padding:7px 12px;font-size:13px;
+               font-family:Lato,sans-serif;outline:none;flex:1;min-width:160px"
+        oninput="filterTable(this.value)">
+    </div>
+
+    <div style="overflow-x:auto">
+      <table id="teacherTable">
+        <thead>
+          <tr>
+            <th>Photo</th>
+            <th>Name</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Override</th>
+            <th>Manual Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="teacherTableBody">
+          <tr><td colspan="7" style="text-align:center;color:var(--text-soft);padding:30px">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /admin-body -->
+
+<script>
+"use strict";
+
+/* ── helpers ── */
+function toast(msg, ms = 2800) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), ms);
+}
+
+function parseSlots(str) {
+  if (!str || !str.trim()) return [];
+  return str.split(",").map(s => s.trim()).filter(Boolean);
+}
+
+const DAYS = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+const DAY_IDS = ["sSun","sMon","sTue","sWed","sThu","sFri","sSat"];
+
+const STATUS_OPTIONS = [
+  "Available","Busy","In Class","In Meeting",
+  "On Leave","At Department","Weekend","NA"
+];
+
+/* ── Fetch full data (admin endpoint) ── */
+let allTeachers = [];
+
+async function loadTeachers() {
+  try {
+    const res  = await fetch("/admin/teachers");
+    allTeachers = await res.json();
+    renderTable(allTeachers);
+  } catch (e) {
+    console.error(e);
+    toast("❌ Failed to load teachers");
+  }
+}
+
+/* ── Render table ── */
+function renderTable(list) {
+  const tbody = document.getElementById("teacherTableBody");
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-soft);padding:30px">No teachers found.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map(t => {
+    const statusOpts = STATUS_OPTIONS.map(s =>
+      `<option value="${s}" ${t.manualStatus === s ? "selected" : ""}>${s}</option>`
+    ).join("");
+
+    return `
+      <tr data-id="${t.id}">
+        <td>
+          <img class="table-avatar" src="${t.image || 'https://i.pravatar.cc/40'}"
+               alt="${t.name}" onerror="this.src='https://i.pravatar.cc/40'">
+        </td>
+        <td><strong>${t.name}</strong><br>
+            <span style="font-size:11px;color:var(--text-soft)">${t.designation||""}</span></td>
+        <td style="text-transform:capitalize">${t.role}</td>
+        <td>
+          <span id="eff-${t.id}" style="font-size:12px;font-weight:700">${t.effectiveStatus||"—"}</span>
+        </td>
+        <td>
+          <label class="toggle-switch" title="Enable manual override">
+            <input type="checkbox" id="ov-${t.id}" ${t.overrideActive ? "checked" : ""}
+              onchange="toggleOverride(${t.id}, this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </td>
+        <td>
+          <select class="status-select" id="ms-${t.id}"
+            onchange="setManualStatus(${t.id}, this.value)" ${!t.overrideActive ? "disabled" : ""}>
+            <option value="">— auto —</option>
+            ${statusOpts}
+          </select>
+        </td>
+        <td>
+          <button class="btn btn-info btn-sm" onclick="editTeacher(${t.id})">✏ Edit</button>
+          &nbsp;
+          <button class="btn btn-danger btn-sm" onclick="deleteTeacher(${t.id})">🗑 Del</button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+/* ── Filter ── */
+function filterTable(q) {
+  const lower = q.toLowerCase();
+  const filtered = allTeachers.filter(t =>
+    t.name.toLowerCase().includes(lower) ||
+    (t.designation||"").toLowerCase().includes(lower) ||
+    t.role.toLowerCase().includes(lower)
+  );
+  renderTable(filtered);
+}
+
+/* ── Toggle Override ── */
+async function toggleOverride(id, active) {
+  try {
+    const res  = await fetch(`/admin/override/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ overrideActive: active })
+    });
+    const data = await res.json();
+    /* enable/disable select */
+    const sel = document.getElementById("ms-" + id);
+    if (sel) sel.disabled = !active;
+    /* update effective status display */
+    const eff = document.getElementById("eff-" + id);
+    if (eff) eff.textContent = data.effectiveStatus || "—";
+
+    const t = allTeachers.find(x => x.id === id);
+    if (t) t.overrideActive = active;
+    toast(active ? "✅ Manual override ON" : "🔄 Auto mode restored");
+  } catch(e) { toast("❌ Error updating override"); }
+}
+
+/* ── Set Manual Status ── */
+async function setManualStatus(id, status) {
+  try {
+    const res  = await fetch(`/admin/override/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ manualStatus: status || null })
+    });
+    const data = await res.json();
+    const eff = document.getElementById("eff-" + id);
+    if (eff) eff.textContent = data.effectiveStatus || "—";
+
+    const t = allTeachers.find(x => x.id === id);
+    if (t) t.manualStatus = status;
+    toast("✅ Status updated: " + (status || "auto"));
+  } catch(e) { toast("❌ Error setting status"); }
+}
+
+/* ── Edit ── */
+function editTeacher(id) {
+  const t = allTeachers.find(x => x.id === id);
+  if (!t) return;
+
+  document.getElementById("editId").value  = t.id;
+  document.getElementById("fName").value   = t.name || "";
+  document.getElementById("fDesig").value  = t.designation || "";
+  document.getElementById("fRole").value   = t.role || "lecturer";
+  document.getElementById("fPhone").value  = t.phone || "";
+  document.getElementById("fEmail").value  = t.email || "";
+  document.getElementById("fImage").value  = t.image || "";
+  document.getElementById("formTitle").textContent = "✏ Edit Teacher";
+
+  /* Fill schedule */
+  const ws = t.weeklySchedule || {};
+  DAYS.forEach((day, i) => {
+    const slots = ws[day] || [];
+    document.getElementById(DAY_IDS[i]).value = slots.join(", ");
+  });
+
+  /* Scroll to form */
+  document.querySelector(".admin-form-panel").scrollIntoView({ behavior: "smooth" });
+}
+
+/* ── Delete ── */
+async function deleteTeacher(id) {
+  if (!confirm("Are you sure you want to remove this teacher?")) return;
+  try {
+    await fetch(`/admin/delete/${id}`, { method: "DELETE" });
+    allTeachers = allTeachers.filter(x => x.id !== id);
+    renderTable(allTeachers);
+    toast("🗑 Teacher removed");
+  } catch(e) { toast("❌ Error deleting teacher"); }
+}
+
+/* ── Submit (Add / Update) ── */
+async function submitForm() {
+  const name = document.getElementById("fName").value.trim();
+  const role = document.getElementById("fRole").value;
+  if (!name) { toast("⚠️ Name is required!"); return; }
+
+  const weeklySchedule = {};
+  DAYS.forEach((day, i) => {
+    const raw = document.getElementById(DAY_IDS[i]).value;
+    weeklySchedule[day] = parseSlots(raw);
+  });
+
+  const payload = {
+    name,
+    designation: document.getElementById("fDesig").value.trim(),
+    role,
+    phone:  document.getElementById("fPhone").value.trim(),
+    email:  document.getElementById("fEmail").value.trim(),
+    image:  document.getElementById("fImage").value.trim(),
+    weeklySchedule
+  };
+
+  const editId = document.getElementById("editId").value;
+  try {
+    if (editId) {
+      await fetch(`/admin/update/${editId}`, {
+        method: "PUT",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify(payload)
+      });
+      toast("✅ Teacher updated!");
+    } else {
+      await fetch("/admin/add", {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify(payload)
+      });
+      toast("✅ Teacher added!");
+    }
+    await loadTeachers();
+    resetForm();
+  } catch(e) { toast("❌ Save failed"); }
+}
+
+/* ── Reset form ── */
+function resetForm() {
+  document.getElementById("editId").value  = "";
+  document.getElementById("fName").value   = "";
+  document.getElementById("fDesig").value  = "";
+  document.getElementById("fRole").value   = "lecturer";
+  document.getElementById("fPhone").value  = "";
+  document.getElementById("fEmail").value  = "";
+  document.getElementById("fImage").value  = "";
+  document.getElementById("formTitle").textContent = "➕ Add Teacher";
+  DAY_IDS.forEach(id => document.getElementById(id).value = "");
+}
+
+/* ── Fetch effective status for all (to populate status column) ── */
+async function enrichWithStatus() {
+  try {
+    const res  = await fetch("/data");
+    const data = await res.json();
+    data.forEach(t => {
+      const admin = allTeachers.find(x => x.id === t.id);
+      if (admin) admin.effectiveStatus = t.status;
+      const eff = document.getElementById("eff-" + t.id);
+      if (eff) eff.textContent = t.status || "—";
+    });
+  } catch(e) { /* silent */ }
+}
+
+/* ── Boot ── */
+loadTeachers().then(() => enrichWithStatus());
+setInterval(() => enrichWithStatus(), 30_000);
+</script>
+
+</body>
+</html>
